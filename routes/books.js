@@ -3,6 +3,8 @@ const express = require("express");
 const router = express.Router();
 const { books } = require("../data/db.json");
 
+const { Book, Author } = require("../models");
+
 const filterBooksBy = (property, value) => {
   return books.filter(b => b[property] === value);
 };
@@ -22,21 +24,26 @@ const verifyToken = (req, res, next) => {
 
 router
   .route("/")
-  .get((req, res) => {
-    const { author, title } = req.query;
-
-    if (title) {
-      res.json(filterBooksBy("title", title));
-    } else if (author) {
-      res.json(filterBooksBy("author", author));
-    } else {
-      res.json(books);
+  .get(async (req, res) => {
+    try {
+      const books = await Book.findAll({ include: [{ model: Author }] });
+      return res.json(books);
+    } catch (err) {
+      return res.status(500).send(err);
     }
   })
-  .post(verifyToken, (req, res) => {
-    const book = req.body;
-    book.id = uuid();
-    res.status(201).json(req.body);
+  .post(verifyToken, async (req, res) => {
+    try {
+      const [author] = await Author.findOrCreate({
+        where: { name: req.body.author.name }
+      });
+      const book = await Book.create({ title: req.body.title });
+      book.setAuthor(author);
+      book.save();
+      return res.status(201).json(book);
+    } catch (err) {
+      return res.status(500).json(err);
+    }
   });
 
 router
